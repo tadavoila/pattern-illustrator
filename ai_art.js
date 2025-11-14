@@ -1,20 +1,31 @@
 /* ai_art.js
    - Uses Gemini API to create art with strokes
    - I created this file by duplicating ai.js and modifying it for the art prompt, so no AI was used in creating this specific file.
-   - Sends a POST request with a text prompt and the current canvas strokes to the /art Gemini API endpoint 
+   - Sends a POST request with a text prompt and the current canvas strokes to the /api/art Gemini API endpoint 
       to generate new AI-drawn strokes and add them to the canvas.
 */
 
 (() => {
   let inputEl, buttonEl, statusEl;
   let inited = false;
-  let ENDPOINT = "http://localhost:8787/art";
+
+  // Default: production on Vercel
+  let ENDPOINT = "/api/art";
+
+  // Local dev (canvas running e.g. on http://localhost:5500, API on 8787)
+  if (
+    typeof window !== "undefined" &&
+    (window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1")
+  ) {
+    ENDPOINT = "http://localhost:8787/api/art";
+  }
 
   function serializeExisting() {
     // Pull the current canvas strokes into plain JSON 
     if (!Array.isArray(window.strokes)) return [];
     return window.strokes.map((s) => ({
-      color: null, 
+      color: null,
       thickness: Number(s.thickness) || 4,
       opacity: Number(s.opacity) || 100,
       eraser: !!s.eraser,
@@ -28,7 +39,8 @@
   async function generateArt() {
     const prompt = (inputEl.value || "").trim();
     if (!prompt) {
-      statusEl.textContent = 'Enter a prompt (e.g., "add a star on top of the Christmas tree").';
+      statusEl.textContent =
+        'Enter a prompt (e.g., "add a star on top of the Christmas tree").';
       return;
     }
 
@@ -37,13 +49,12 @@
     buttonEl.disabled = true;
     statusEl.textContent = "Generating…";
 
-    // POST request
     try {
       const resp = await fetch(ENDPOINT, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Accept": "application/json"
+          Accept: "application/json"
         },
         body: JSON.stringify({ prompt, existing })
       });
@@ -67,23 +78,34 @@
       // App.js listens for "ai-art" and inserts strokes
       window.dispatchEvent(new CustomEvent("ai-art", { detail: data }));
 
-      statusEl.textContent = `Placed ${data.strokes.length} stroke${data.strokes.length === 1 ? "" : "s"} on canvas.`;
+      statusEl.textContent = `Placed ${data.strokes.length} stroke${
+        data.strokes.length === 1 ? "" : "s"
+      } on canvas.`;
     } catch (err) {
       console.error(err);
       statusEl.textContent = `Error: ${err.message}`;
 
       // Fallback
-      window.dispatchEvent(new CustomEvent("ai-art", {
-        detail: {
-          strokes: [{
-            color: "#000000",
-            thickness: 4,
-            opacity: 100,
-            eraser: false,
-            points: [{x:0,y:0},{x:120,y:40},{x:220,y:10},{x:300,y:90}]
-          }]
-        }
-      }));
+      window.dispatchEvent(
+        new CustomEvent("ai-art", {
+          detail: {
+            strokes: [
+              {
+                color: "#000000",
+                thickness: 4,
+                opacity: 100,
+                eraser: false,
+                points: [
+                  { x: 0, y: 0 },
+                  { x: 120, y: 40 },
+                  { x: 220, y: 10 },
+                  { x: 300, y: 90 }
+                ]
+              }
+            ]
+          }
+        })
+      );
     } finally {
       buttonEl.disabled = false;
     }
@@ -141,8 +163,8 @@
     buttonEl.style.cursor = "pointer";
     buttonEl.style.fontFamily = "cursive";
     buttonEl.style.fontSize = "12px";
-    buttonEl.style.minWidth = '120px'; 
-    buttonEl.style.height = '32px';
+    buttonEl.style.minWidth = "120px";
+    buttonEl.style.height = "32px";
     buttonEl.addEventListener("click", generateArt);
     wrap.appendChild(buttonEl);
 

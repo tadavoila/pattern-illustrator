@@ -4,14 +4,24 @@
 - Primarily consulted the following websites:
   - https://ai.google.dev/gemini-api/docs/quickstart (API integration)
   - https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch (POST requests)
-- Sends a POST request with a text prompt to the /palette Gemini API endpoint to generate and display an AI-created color palette.
+- Sends a POST request with a text prompt to the /api/palette Gemini API endpoint to generate and display an AI-created color palette.
 */
 
 (() => {
   let inputEl, buttonEl, statusEl;
   let inited = false;
 
-  let ENDPOINT = "http://localhost:8787/palette";
+  // Default: production on Vercel
+  let ENDPOINT = "/api/palette";
+
+  // If running locally (e.g., Live Server on a different port), point to local Node server
+  if (
+    typeof window !== "undefined" &&
+    (window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1")
+  ) {
+    ENDPOINT = "http://localhost:8787/api/palette";
+  }
 
   // Prompt
   async function generateColors() {
@@ -24,11 +34,13 @@
     buttonEl.disabled = true;
     statusEl.textContent = "Generating…";
 
-    // POST request
     try {
       const resp = await fetch(ENDPOINT, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json"
+        },
         body: JSON.stringify({ prompt })
       });
 
@@ -43,13 +55,19 @@
       }
 
       // Broadcast to the main app
-      window.dispatchEvent(new CustomEvent("ai-palette", { detail: { colors: data.colors } }));
+      window.dispatchEvent(
+        new CustomEvent("ai-palette", { detail: { colors: data.colors } })
+      );
       statusEl.textContent = `Got ${data.colors.length} colors. Click a swatch in the app.`;
     } catch (err) {
       console.error(err);
       statusEl.textContent = `Error: ${err.message}`;
       // Broadcast a fallback so the UI can react
-      window.dispatchEvent(new CustomEvent("ai-palette", { detail: { colors: ["#FF0000"] } }));
+      window.dispatchEvent(
+        new CustomEvent("ai-palette", {
+          detail: { colors: ["#FF0000"] }
+        })
+      );
     } finally {
       buttonEl.disabled = false;
     }
@@ -59,7 +77,7 @@
     if (inited) return; // avoid duplicate panels if init is called twice
     inited = true;
 
-    // Allow endpoint override
+    // Allow endpoint override if needed
     if (typeof opts.endpoint === "string" && opts.endpoint.trim()) {
       ENDPOINT = opts.endpoint.trim();
     }
@@ -108,8 +126,8 @@
     buttonEl.style.cursor = "pointer";
     buttonEl.style.fontFamily = "cursive";
     buttonEl.style.fontSize = "12px";
-    buttonEl.style.minWidth = '120px'; 
-    buttonEl.style.height = '32px';
+    buttonEl.style.minWidth = "120px";
+    buttonEl.style.height = "32px";
     buttonEl.addEventListener("click", generateColors);
     wrap.appendChild(buttonEl);
 
