@@ -38,17 +38,39 @@ I found that the AI Palette generator is very accurate at producing colors that 
 
 Overall, I love that Pattern Illustrator enables the user to play, iterate, and discover meaning through experimentation and modification, by transforming repetition, symmetry, and constraint into a language of expressive design. I was able to discover new drawings and animation capabilities (e.g. drawing a simple object, clearing the canvas, and drawing another different object produces an animation that morphs the first object into the next) from my tool, and I hope to continue expanding Pattern Illustrator into a platform for greater creative discovery in both sketching and animation. 
 
-## Instructions to run with AI features
-1. Clone the repository.
-2. Create a free Gemini API key for 2.5-Flash in Google AI Studio following these [instructions](https://ai.google.dev/gemini-api/docs/api-key). 
-3. Rename `.env.example` to `.env` and insert the API key.
-4. Download and install [node.js](https://nodejs.org/en/download).
-5. Open Visual Studio Code and make sure you are in the `project-1` directory. Install the [Live Server](https://marketplace.visualstudio.com/items?itemName=ritwickdey.LiveServer) extension.
-6. Run `node server.js` in the terminal. You should see the following message if done correctly:
-```
-🚀 Server running on http://localhost:8787
-🧠 Using model: gemini-2.5-flash
-✅ Ready for /palette and /art
-```
-7. Open `index.html` with Live Server. 
+## Run with AI Features
+
+You can run the app either on Vercel (recommended) or fully locally.
+
+### Option A — Deploy on Vercel (recommended)
+1. Create a free Gemini API key for 2.5‑Flash in Google AI Studio: https://ai.google.dev/gemini-api/docs/api-key
+2. In Vercel Project Settings → Environment Variables, add `GEMINI_API_KEY` with your key value.
+3. Deploy the repo. The site serves `index.html`, and API routes are available at `/api/palette` and `/api/art`.
+
+Notes:
+- `vercel.json` rewrites all non-API paths to `index.html` and keeps `/api/*` on serverless functions.
+- No custom server is needed in production.
+
+### Option B — Local development
+
+Method 1: Vercel Dev (static + serverless locally)
+1. Install Node (v18+). On macOS with Homebrew:
+	- Install Homebrew: https://brew.sh
+	- `brew install node`
+2. Install Vercel CLI: `npm i -g vercel`
+3. From the project root, run: `vercel dev`
+4. Open `http://localhost:3000`. Frontend uses relative `/api/*` so everything works locally.
+
+Method 2: Separate Node API + a static server
+1. Install Node (v18+). On macOS with Homebrew: `brew install node`
+2. Create `.env` in the project root and set `GEMINI_API_KEY=...`.
+3. Install deps: `npm install`
+4. Start the API server: `node server.js`
+	You should see:
+	```
+	🚀 Local server running on http://localhost:8787
+	🧠 Using model: gemini-2.5-flash
+	✅ Ready for /api/palette and /api/art
+	```
+5. Serve `index.html` with a static server (e.g., VS Code Live Server). When using a local static server on a port other than 3000, the UI will call the API at `http://localhost:8787` automatically.
 

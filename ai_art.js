@@ -12,13 +12,18 @@
   // Default: production on Vercel
   let ENDPOINT = "/api/art";
 
-  // Local dev (canvas running e.g. on http://localhost:5500, API on 8787)
+  // Local dev heuristic: if running a static server on localhost on a port
+  // other than 3000 (Vercel dev) or 8787 (Node API), point API to 8787.
+  // Keep relative path for Vercel dev and production.
   if (
     typeof window !== "undefined" &&
     (window.location.hostname === "localhost" ||
       window.location.hostname === "127.0.0.1")
   ) {
-    ENDPOINT = "http://localhost:8787/api/art";
+    const p = String(window.location.port || "");
+    if (p && p !== "3000" && p !== "8787") {
+      ENDPOINT = "http://localhost:8787/api/art";
+    }
   }
 
   function serializeExisting() {

@@ -14,13 +14,18 @@
   // Default: production on Vercel
   let ENDPOINT = "/api/palette";
 
-  // If running locally (e.g., Live Server on a different port), point to local Node server
+  // If running locally on a static dev server (e.g., Live Server on port 5500)
+  // use a separate API server on 8787. Keep relative path for Vercel dev (3000)
+  // and for production where /api/* is served by Vercel.
   if (
     typeof window !== "undefined" &&
     (window.location.hostname === "localhost" ||
       window.location.hostname === "127.0.0.1")
   ) {
-    ENDPOINT = "http://localhost:8787/api/palette";
+    const p = String(window.location.port || "");
+    if (p && p !== "3000" && p !== "8787") {
+      ENDPOINT = "http://localhost:8787/api/palette";
+    }
   }
 
   // Prompt
