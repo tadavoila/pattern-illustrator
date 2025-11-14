@@ -32,16 +32,16 @@ let currentStroke = null;
 // live symmetric clones for current drag
 let liveSymmetryStrokes = [];
 
-// Layout
-const BOX = { x: 450, y: 70, w: 1100, h: 550 };
+// Layout (responsive width/height; keep left gutter for tools)
+let BOX = { x: 450, y: 70, w: 1100, h: 550 };
 
-// Wheel + Brightness bar
-const WHEEL = { cx: 190, cy: 150, r: 120 };
-const BBAR  = { x: 330, y: 35, w: 18,  h: 224, r: 6 };
+// Wheel + Brightness bar (scaled via uiScale)
+let WHEEL = { cx: 190, cy: 150, r: 120 };
+let BBAR  = { x: 330, y: 35, w: 18,  h: 224, r: 6 };
 
-// Buttons
-const BTN_W = 70;   
-const BTN_H = 32;  
+// Buttons (base sizes; styled with uiScale)
+let BTN_W = 70;   
+let BTN_H = 32;  
 
 // Current color (HSB + Alpha)
 let H = 16, S = 46, B = 100, A = 100;
@@ -72,7 +72,10 @@ let eraserPrev = null;
 
 // AI palette state
 let paletteColors = [];
-const PALETTE = { x: BOX.x, y: BOX.y - 50, sw: 36, gap: 10, rows: 1 };
+let PALETTE = { x: BOX.x, y: BOX.y - 50, sw: 36, gap: 10, rows: 1 };
+
+// Global UI scale
+let uiScale = 1;
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
@@ -80,28 +83,11 @@ function setup() {
   pixelDensity(1);
   textFont('cursive');
 
-  // Precompute H/S wheel
-  gWheel = createGraphics(WHEEL.r * 2 + 2, WHEEL.r * 2 + 2);
-  gWheel.colorMode(HSB, 360, 100, 100, 100);
-  gWheel.noStroke();
-  gWheel.noSmooth();
-  const C = gWheel.width / 2;
-  gWheel.loadPixels();
-  for (let y = 0; y < gWheel.height; y++) {
-    for (let x = 0; x < gWheel.width; x++) {
-      const dx = x - C, dy = y - C;
-      const r = Math.hypot(dx, dy);
-      if (r <= WHEEL.r) {
-        let ang = degrees(Math.atan2(dy, dx));
-        if (ang < 0) ang += 360;
-        const sat = map(r, 0, WHEEL.r, 0, 100, true);
-        gWheel.set(x, y, gWheel.color(ang, sat, 100));
-      } else {
-        gWheel.set(x, y, gWheel.color(0, 0, 100, 0));
-      }
-    }
-  }
-  gWheel.updatePixels();
+  // Fit BOX to current window so right side never overflows
+  updateBoxForWindow();
+  // Compute UI scale and apply scaled metrics
+  updateUIScale();
+  applyUIScale();
 
   // Sliders
   createSpan('<b>Thickness:</b>')
@@ -248,9 +234,7 @@ function setup() {
   });
 
   // --- Symmetry dropdown (right side of title) ---
-  // Position to the right of the title line; tweak offsets if you adjust title placement
-  // Title baseline is around (BOX.x * 1.7, BOX.y - 20)
-  // We'll anchor the dropdown near the top-right of the box header area
+  // Anchor near the top-right of the box header area (after BOX sizing)
   const symX = BOX.x + BOX.w - 300;
   const symY = BOX.y - 46;
   // default mode lives in symmetry.js (Symmetry.mode)
@@ -288,6 +272,10 @@ function setup() {
       selectedVertexIdx = -1;
     }
   });
+
+  // After panel mounts, tighten BOX.h to avoid vertical scroll
+  updateBoxForWindow();
+  Store.reposition({ box: BOX });
 
   // Storage/Animation button handlers 
   storeBtn.mousePressed(() => {
@@ -555,14 +543,14 @@ function drawUIPanel() {
   noStroke(); fill('#ffffff'); rect(0, 0, BOX.x - 40, height);
   stroke('#111'); strokeWeight(1); line(BOX.x - 25, 0, BOX.x - 25, height);
 
-  noStroke(); fill('#111'); textSize(16); textStyle(BOLD); text('Tools', 40, 34);
+  noStroke(); fill('#111'); textSize(16 * uiScale); textStyle(BOLD); text('Tools', 40, 34);
 
   imageMode(CENTER); image(gWheel, WHEEL.cx, WHEEL.cy);
 
   // pointer
   const r = map(S, 0, 100, 0, WHEEL.r); const a = radians(H);
   const px = WHEEL.cx + r * cos(a); const py = WHEEL.cy + r * sin(a);
-  push(); translate(px, py); noStroke(); fill(H, S, max(40, B), A); circle(0, 0, 14); stroke('#111'); noFill(); circle(0, 0, 14); pop();
+  push(); translate(px, py); noStroke(); fill(H, S, max(40, B), A); circle(0, 0, 14 * uiScale); stroke('#111'); noFill(); circle(0, 0, 14 * uiScale); pop();
 
   // brightness bar
   noFill(); strokeWeight(1);
@@ -579,7 +567,7 @@ function drawUIPanel() {
   const c = color(H, S, B, A);
   const R = Math.round(red(c)), G = Math.round(green(c)), Bl = Math.round(blue(c));
   const alpha255 = Math.round(map(A, 0, 100, 0, 255));
-  noStroke(); fill('#111'); textSize(12); textStyle(NORMAL);
+  noStroke(); fill('#111'); textSize(12 * uiScale); textStyle(NORMAL);
   const y1 = swY + 46, y2 = y1 + 20;
   text(`Hue: ${Math.round(H)}°`, 40, y1); text(`Sat: ${Math.round(S)}%`, 100, y1); text(`Bri: ${Math.round(B)}%`, 165, y1);
   text(`Red: ${R}`, 40, y2); text(`Green: ${G}`, 100, y2); text(`Blue: ${Bl}`, 165, y2); text(`Alpha: ${alpha255}`, 220, y2);
@@ -590,8 +578,8 @@ function drawUIPanel() {
 function drawBox() {
   noStroke(); fill('#ffffff'); rect(BOX.x, BOX.y, BOX.w, BOX.h);
   stroke('#111'); strokeWeight(1); noFill(); rect(BOX.x, BOX.y, BOX.w, BOX.h);
-  noStroke(); fill('#111'); textSize(42); textStyle(BOLD); textFont('cursive'); text('Pattern Illustrator', BOX.x * 1.8, BOX.y - 20);
-  textStyle(ITALIC); textFont('cursive'); textSize(16); fill('#444'); text('By: Siddharth Chattoraj', BOX.x + BOX.w - 185, BOX.y + BOX.h + 22.5);
+  noStroke(); fill('#111'); textSize(42 * uiScale); textStyle(BOLD); textFont('cursive'); text('Pattern Illustrator', BOX.x * 1.8, BOX.y - 20);
+  textStyle(ITALIC); textFont('cursive'); textSize(16 * uiScale); fill('#444'); text('By: Siddharth Chattoraj', BOX.x + BOX.w - 185, BOX.y + BOX.h + 22.5);
 }
 
 // AI Palette
@@ -627,7 +615,103 @@ function hexToHSB(hex) {
 
 // Save PNG of drawing box
 function saveCropped() { const img = get(BOX.x, BOX.y, BOX.w, BOX.h); img.save('drawing_cropped', 'png'); }
-function windowResized() { resizeCanvas(windowWidth, windowHeight); }
+// (handled below with responsive sizing)
+
+// Keep BOX inside the viewport with a small right/bottom margin
+function updateBoxForWindow() {
+  // Keep existing left gutter for the tool panel
+  const RIGHT_MARGIN = 30;
+  const MOUNT_BELOW = 35; // matches Store.init mountBelowPx
+  const FOOTER_SAFETY = 24; // for footer text inside the box area
+  const panelH = (window.Store && typeof Store.panelHeight === 'function') ? Store.panelHeight() : 140;
+  const BOTTOM_RESERVED = MOUNT_BELOW + panelH + FOOTER_SAFETY;
+
+  // Minimum sizes so the box remains usable on smaller screens
+  const MIN_W = 600;
+  const MIN_H = 400;
+
+  // Recompute width/height to avoid overflowing right/bottom edges
+  BOX.w = Math.max(MIN_W, Math.floor(windowWidth - BOX.x - RIGHT_MARGIN));
+  BOX.h = Math.max(MIN_H, Math.floor(windowHeight - BOX.y - BOTTOM_RESERVED));
+}
+
+// Also recalc layout when the window changes size
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  updateBoxForWindow();
+  updateUIScale();
+  applyUIScale();
+  // Reposition symmetry controls relative to BOX
+  const symX = BOX.x + BOX.w - 300;
+  const symY = BOX.y - 46;
+  window.Symmetry?.reposition(symX, symY, BOX);
+  // Reposition AI panels relative to scaled UI
+  const aiArtY = Math.round(640 * uiScale);
+  const aiPalY = Math.round(730 * uiScale);
+  window.AIArt?.reposition?.(40, aiArtY);
+  window.AIPalette?.reposition?.(40, aiPalY);
+  // Reposition storage panel under BOX
+  Store.reposition({ box: BOX });
+}
+
+// Compute scale based on viewport, clamped to a sensible range
+function updateUIScale() {
+  const baseW = 1600;
+  const baseH = 900;
+  const s = Math.min(windowWidth / baseW, windowHeight / baseH);
+  uiScale = Math.max(0.8, Math.min(1.25, s));
+}
+
+// Apply scaled metrics to UI bits and rebuild dependent graphics
+function applyUIScale() {
+  // Scale wheel radius and brightness bar height
+  WHEEL.r = Math.round(120 * uiScale);
+  BBAR.h = Math.round(224 * uiScale);
+  // Rebuild wheel graphic at new size
+  buildColorWheelGraphic();
+
+  // Re-apply button sizing
+  const allBtns = [saveBtn, clearBtn, drawBtn, eraseBtn, eraseStrokeBtn, changeColorBtn, vertexBtn, moveBtn, storeBtn, animateBtn];
+  const colors = ['#2563EB','#10B981','#374151','#F59E0B','#EF4444','#8B5CF6','#0EA5E9','#22C55E','#9333EA','#0D9488'];
+  for (let i = 0; i < allBtns.length; i++) {
+    const b = allBtns[i]; if (b) styleButton(b, colors[i] || '#374151');
+  }
+
+  // Scale sliders' visual width
+  const sliderWidth = Math.round(260 * uiScale) + 'px';
+  thickSlider && thickSlider.style('width', sliderWidth);
+  opacSlider && opacSlider.style('width', sliderWidth);
+  eraserSlider && eraserSlider.style('width', sliderWidth);
+  durationSlider && durationSlider.style('width', Math.round(150 * uiScale) + 'px');
+
+  // Scale palette swatch size
+  PALETTE.sw = Math.round(36 * uiScale);
+}
+
+// Build/rebuild offscreen color wheel graphic per current WHEEL.r
+function buildColorWheelGraphic() {
+  gWheel = createGraphics(WHEEL.r * 2 + 2, WHEEL.r * 2 + 2);
+  gWheel.colorMode(HSB, 360, 100, 100, 100);
+  gWheel.noStroke();
+  gWheel.noSmooth();
+  const C = gWheel.width / 2;
+  gWheel.loadPixels();
+  for (let y = 0; y < gWheel.height; y++) {
+    for (let x = 0; x < gWheel.width; x++) {
+      const dx = x - C, dy = y - C;
+      const r = Math.hypot(dx, dy);
+      if (r <= WHEEL.r) {
+        let ang = degrees(Math.atan2(dy, dx));
+        if (ang < 0) ang += 360;
+        const sat = map(r, 0, WHEEL.r, 0, 100, true);
+        gWheel.set(x, y, gWheel.color(ang, sat, 100));
+      } else {
+        gWheel.set(x, y, gWheel.color(0, 0, 100, 0));
+      }
+    }
+  }
+  gWheel.updatePixels();
+}
 
 // Button Styles & Mode Helpers
 function styleButton(btn, bg) {
@@ -636,11 +720,11 @@ function styleButton(btn, bg) {
   btn.style('border', 'none');
   btn.style('border-radius', '8px');
   btn.style('font-family', 'cursive');
-  btn.style('font-size', '12px');
+  btn.style('font-size', Math.round(12 * uiScale) + 'px');
   btn.style('cursor', 'pointer');
 
-  btn.style('width',  BTN_W + 'px');
-  btn.style('height', BTN_H + 'px');
+  btn.style('width',  Math.round(BTN_W * uiScale) + 'px');
+  btn.style('height', Math.round(BTN_H * uiScale) + 'px');
   btn.style('padding', '0');
   btn.style('box-sizing', 'border-box');
   btn.style('display', 'inline-flex');

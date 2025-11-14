@@ -299,6 +299,29 @@
     return ui.select;
   }
 
+  function reposition(x, y, BOX) {
+    if (!ui.select) return;
+    // Move dropdown
+    ui.select.position(x + 120, y);
+
+    // Inline controls follow BOX along the bottom
+    const gx = BOX.x, gy = BOX.h + 80;
+    ui.nLabel && ui.nLabel.position(gx, gy);
+    ui.nSlider && ui.nSlider.position(gx + 18, gy + 4);
+    ui.nBadge && ui.nBadge.position(gx + 134, gy - 2);
+
+    ui.mirrorLabel && ui.mirrorLabel.position(gx + 190, gy + 1);
+    ui.mirrorCheck && ui.mirrorCheck.position(gx + 240, gy + 1);
+
+    ui.scaleLabel && ui.scaleLabel.position(gx + 185, gy - 1);
+    ui.scaleSlider && ui.scaleSlider.position(gx + 225, gy + 4);
+    ui.scaleBadge && ui.scaleBadge.position(gx + 340, gy - 2);
+
+    ui.depthLabel && ui.depthLabel.position(gx + 400, gy);
+    ui.depthSlider && ui.depthSlider.position(gx + 445, gy + 4);
+    ui.depthBadge && ui.depthBadge.position(gx + 560, gy - 2);
+  }
+
   const Symmetry = {
     mode: 'rot180',
     N: 10,
@@ -309,6 +332,7 @@
     createDropdown,
     getTransforms: (BOX) => getSymmetryTransforms(Symmetry.mode, BOX),
     buildClones,
+    reposition,
   };
 
   window.Symmetry = Symmetry;

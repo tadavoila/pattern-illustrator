@@ -32,6 +32,20 @@
     _renderPanel();
   };
 
+  Store.reposition = function reposition({ box } = {}) {
+    if (box) BOX = box;
+    if (!storePanel) return;
+    storePanel.style.left = `${BOX.x}px`;
+    storePanel.style.top  = `${BOX.y + BOX.h + mountBelowPx}px`;
+    storePanel.style.width = `${BOX.w}px`;
+  };
+
+  Store.panelHeight = function panelHeight() {
+    if (storePanel && storePanel.offsetHeight) return storePanel.offsetHeight;
+    // Fallback estimate: header (32) + grid tile (84) + paddings/borders (~24)
+    return 140;
+  };
+
   Store.addFrameFrom = function addFrameFrom(strokes, captureFn) {
     if (!Array.isArray(strokes) || strokes.length === 0) {
       alert('Nothing to store — draw something first.');

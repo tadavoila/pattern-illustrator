@@ -6,7 +6,7 @@
 */
 
 (() => {
-  let inputEl, buttonEl, statusEl;
+  let inputEl, buttonEl, statusEl, wrapEl;
   let inited = false;
 
   // Default: production on Vercel
@@ -123,19 +123,19 @@
     const y = Number.isFinite(opts.y) ? opts.y : 720;
 
     // UI
-    const wrap = document.createElement("div");
-    wrap.style.position = "absolute";
-    wrap.style.left = `${x}px`;
-    wrap.style.top = `${y}px`;
-    wrap.style.fontFamily = "cursive";
-    wrap.style.fontSize = "12px";
-    wrap.style.color = "#111";
+    wrapEl = document.createElement("div");
+    wrapEl.style.position = "absolute";
+    wrapEl.style.left = `${x}px`;
+    wrapEl.style.top = `${y}px`;
+    wrapEl.style.fontFamily = "cursive";
+    wrapEl.style.fontSize = "12px";
+    wrapEl.style.color = "#111";
 
     const title = document.createElement("div");
     title.innerHTML = "<b>AI Art:</b>";
     title.style.marginBottom = "6px";
     title.style.fontSize = "14px";
-    wrap.appendChild(title);
+    wrapEl.appendChild(title);
 
     inputEl = document.createElement("input");
     inputEl.type = "text";
@@ -150,7 +150,7 @@
     inputEl.addEventListener("keydown", (e) => {
       if (e.key === "Enter") generateArt();
     });
-    wrap.appendChild(inputEl);
+    wrapEl.appendChild(inputEl);
 
     buttonEl = document.createElement("button");
     buttonEl.textContent = "Generate Art";
@@ -166,16 +166,21 @@
     buttonEl.style.minWidth = "120px";
     buttonEl.style.height = "32px";
     buttonEl.addEventListener("click", generateArt);
-    wrap.appendChild(buttonEl);
+    wrapEl.appendChild(buttonEl);
 
     statusEl = document.createElement("div");
     statusEl.style.marginTop = "6px";
     statusEl.style.color = "#444";
     statusEl.textContent = "Type a prompt and click Generate Art.";
-    wrap.appendChild(statusEl);
-
-    document.body.appendChild(wrap);
+    wrapEl.appendChild(statusEl);
+    document.body.appendChild(wrapEl);
   }
 
-  window.AIArt = { init };
+  function reposition(x, y) {
+    if (!wrapEl) return;
+    wrapEl.style.left = `${x}px`;
+    wrapEl.style.top = `${y}px`;
+  }
+
+  window.AIArt = { init, reposition };
 })();
