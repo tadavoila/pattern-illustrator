@@ -1,7 +1,9 @@
 /* server.js — Using Gemini 2.5 Flash
-- Hosts Express routes (/palette, /art, /list-models) that call the Gemini 2.5 Flash API
-  to generate color palettes and vector stroke art, validate JSON, and return responses.
--  I consulted ChatGPT5 for the following:
+- Serves the Pattern Illustrator frontend (index.html + JS/CSS)
+- Hosts Express routes (/api/palette, /api/art, /api/list-models) that call
+  the Gemini 2.5 Flash API to generate color palettes and vector stroke art,
+  validate JSON, and return responses.
+- I consulted ChatGPT5 for the following:
     - Help with creating the server architecture and request–response flow
     - Help with debugging errors with integrating the API calls
 - Primarily consulted the following:
@@ -11,24 +13,41 @@
     - Various Google search results while debugging.
     - My experience interning at Amazon this past summer building AI agents and designing system prompts
 */
+
 import express from "express";
 import cors from "cors";
 import bodyParser from "body-parser";
 import "dotenv/config"; // loads .env from project root (must include GEMINI_API_KEY)
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 
-// Allow local Live Server / frontend origins
-app.use(cors({
-  origin: [/^http:\/\/localhost:\d+$/, /^http:\/\/127\.0\.0\.1:\d+$/],
-}));
+// Allow local Live Server / frontend origins (and same-origin in production)
+app.use(
+  cors({
+    origin: [/^http:\/\/localhost:\d+$/, /^http:\/\/127\.0\.0\.1:\d+$/],
+  })
+);
+
 app.use(bodyParser.json());
+
+// Serve static frontend files (index.html, JS, CSS, libraries, etc.)
+app.use(express.static(__dirname));
+
+// Root route: show the drawing app
+app.get("/", (_req, res) => {
+  res.sendFile(path.join(__dirname, "index.html"));
+});
 
 // --- Verify API key ---
 const API_KEY = process.env.GEMINI_API_KEY;
 if (!API_KEY) {
   console.error("❌ ERROR: GEMINI_API_KEY not found in environment");
-  process.exit(1);
+  // For safety on Vercel, don't exit; the routes will return 500 instead.
 }
 
 // --- Model + API version ---
@@ -39,8 +58,9 @@ const MODEL = "gemini-2.5-flash";
 function extractTextFromCandidates(data) {
   const cand = data?.candidates?.[0];
   const parts = cand?.content?.parts || [];
-  return parts.map(p => p.text || "").join("").trim();
+  return parts.map((p) => p.text || "").join("").trim();
 }
+
 function ensureValidPalette(json) {
   if (!json || !Array.isArray(json.colors)) {
     throw new Error("Invalid response format: missing colors array");
@@ -52,17 +72,15 @@ function ensureValidPalette(json) {
   return json;
 }
 
-/* ---------------- Quiet common GETs ---------------- */
-app.get("/", (_req, res) => {
-  res.status(200).send("🎨 API running. POST /palette for palettes, /art for strokes.");
-});
-app.get("/favicon.ico", (_req, res) => res.status(204).end());
-app.get("/.well-known/appspecific/com.chrome.devtools.json", (_req, res) => res.status(204).end());
+/* ---------------- Palette route ---------------- */
 
-/* ---------------- Palette route (unchanged) ---------------- */
-app.post("/palette", async (req, res) => {
-  console.log("\n=== /palette Request ===");
+app.post("/api/palette", async (req, res) => {
+  console.log("\n=== /api/palette Request ===");
   console.log("Request body:", req.body);
+
+  if (!API_KEY) {
+    return res.status(500).json({ error: "GEMINI_API_KEY not configured" });
+  }
 
   try {
     const user = String(req.body?.prompt || "").slice(0, 600).trim();
@@ -77,7 +95,9 @@ No other text or explanation.`;
 
     const fullPrompt = `${sys}\n\nUser requested colors for: ${user}`;
 
-    const url = `https://generativelanguage.googleapis.com/${API_VERSION}/models/${MODEL}:generateContent?key=${encodeURIComponent(API_KEY)}`;
+    const url = `https://generativelanguage.googleapis.com/${API_VERSION}/models/${MODEL}:generateContent?key=${encodeURIComponent(
+      API_KEY
+    )}`;
     const payload = {
       contents: [{ role: "user", parts: [{ text: fullPrompt }] }],
     };
@@ -114,8 +134,14 @@ No other text or explanation.`;
 });
 
 /* ---------------- ART route ---------------- */
-app.post("/art", async (req, res) => {
-  console.log("\n=== /art Request ===");
+
+app.post("/api/art", async (req, res) => {
+  console.log("\n=== /api/art Request ===");
+
+  if (!API_KEY) {
+    return res.status(500).json({ error: "GEMINI_API_KEY not configured" });
+  }
+
   // Pull and lightly bound inputs
   const userPrompt = String(req.body?.prompt || "").slice(0, 600).trim();
   const existingRaw = Array.isArray(req.body?.existing) ? req.body.existing : [];
@@ -127,11 +153,14 @@ app.post("/art", async (req, res) => {
       opacity: Number(s.opacity) || 100,
       eraser: !!s.eraser,
       points: Array.isArray(s.points)
-        ? s.points.slice(0, 1200).map((p) => ({
-            x: Number(p.x),
-            y: Number(p.y),
-          })).filter(p => Number.isFinite(p.x) && Number.isFinite(p.y))
-        : []
+        ? s.points
+            .slice(0, 1200)
+            .map((p) => ({
+              x: Number(p.x),
+              y: Number(p.y),
+            }))
+            .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y))
+        : [],
     }));
 
   try {
@@ -158,7 +187,7 @@ PLACEMENT & COMPOSITION:
 - Preserve overall scale and placement; integrate into current composition, not overwrite it.
 
 NEW DRAWINGS:
-- Be at detailed as possible by using a mixture of short and long strokes to create a recognizeable drawing. 
+- Be as detailed as possible by using a mixture of short and long strokes to create a recognizable drawing. 
 - However, stay within the stroke constraints: Total new strokes: 20..60. Total points across all new strokes ≤ 15000.
 
 STYLE:
@@ -193,7 +222,9 @@ VALIDATION:
     const userJson = JSON.stringify({ prompt: userPrompt, existing });
     const fullPrompt = `${sys}\n\n${userJson}`;
 
-    const url = `https://generativelanguage.googleapis.com/${API_VERSION}/models/${MODEL}:generateContent?key=${encodeURIComponent(API_KEY)}`;
+    const url = `https://generativelanguage.googleapis.com/${API_VERSION}/models/${MODEL}:generateContent?key=${encodeURIComponent(
+      API_KEY
+    )}`;
     const payload = {
       contents: [{ role: "user", parts: [{ text: fullPrompt }] }],
     };
@@ -206,7 +237,10 @@ VALIDATION:
 
     const data = await resp.json();
     if (!resp.ok) {
-      const apiMsg = data?.error?.message || data?.message || JSON.stringify(data).slice(0, 400);
+      const apiMsg =
+        data?.error?.message ||
+        data?.message ||
+        JSON.stringify(data).slice(0, 400);
       throw new Error(`Gemini API error ${resp.status}: ${apiMsg}`);
     }
 
@@ -224,39 +258,51 @@ VALIDATION:
     let totalPoints = 0;
     const MAX_TOTAL_POINTS = 15000;
 
-    art.strokes = art.strokes.map((s) => {
-      const pts = Array.isArray(s.points) ? s.points : [];
-      // limit points per stroke and total
-      let kept = [];
-      for (const p of pts) {
-        if (totalPoints >= MAX_TOTAL_POINTS) break;
-        const x = Number(p.x), y = Number(p.y);
-        if (Number.isFinite(x) && Number.isFinite(y)) {
-          kept.push({ x, y });
-          totalPoints++;
+    art.strokes = art.strokes
+      .map((s) => {
+        const pts = Array.isArray(s.points) ? s.points : [];
+        // limit points per stroke and total
+        let kept = [];
+        for (const p of pts) {
+          if (totalPoints >= MAX_TOTAL_POINTS) break;
+          const x = Number(p.x),
+            y = Number(p.y);
+          if (Number.isFinite(x) && Number.isFinite(y)) {
+            kept.push({ x, y });
+            totalPoints++;
+          }
         }
-      }
-      kept = kept.filter((p, i, a) => i === 0 || p.x !== a[i-1].x || p.y !== a[i-1].y);
+        kept = kept.filter(
+          (p, i, a) => i === 0 || p.x !== a[i - 1].x || p.y !== a[i - 1].y
+        );
 
-      return {
-        color: isHex(s.color) ? s.color.toUpperCase() : "#000000",
-        thickness: Math.max(1, Math.min(40, Number(s.thickness) || 4)),
-        opacity: Math.max(60, Math.min(100, Number(s.opacity) || 100)),
-        eraser: false, // force false
-        points: kept.slice(0, 800)
-      };
-    }).filter((s) => s.points.length >= 2);
+        return {
+          color: isHex(s.color) ? s.color.toUpperCase() : "#000000",
+          thickness: Math.max(1, Math.min(40, Number(s.thickness) || 4)),
+          opacity: Math.max(60, Math.min(100, Number(s.opacity) || 100)),
+          eraser: false, // force false
+          points: kept.slice(0, 800),
+        };
+      })
+      .filter((s) => s.points.length >= 2);
 
     // Fallback if nothing valid
     if (!art.strokes.length) {
       art = {
-        strokes: [{
-          color: "#000000",
-          thickness: 4,
-          opacity: 100,
-          eraser: false,
-          points: [{x:480,y:200},{x:520,y:260},{x:560,y:210},{x:600,y:270}]
-        }]
+        strokes: [
+          {
+            color: "#000000",
+            thickness: 4,
+            opacity: 100,
+            eraser: false,
+            points: [
+              { x: 480, y: 200 },
+              { x: 520, y: 260 },
+              { x: 560, y: 210 },
+              { x: 600, y: 270 },
+            ],
+          },
+        ],
       };
     }
 
@@ -264,26 +310,42 @@ VALIDATION:
   } catch (err) {
     console.error("ART error:", err);
     res.status(500).json({
-      strokes: [{
-        color: "#000000",
-        thickness: 4,
-        opacity: 100,
-        eraser: false,
-        points: [{x:0,y:0},{x:160,y:60},{x:290,y:10},{x:360,y:90}]
-      }],
-      error: err?.message || "Unknown error"
+      strokes: [
+        {
+          color: "#000000",
+          thickness: 4,
+          opacity: 100,
+          eraser: false,
+          points: [
+            { x: 0, y: 0 },
+            { x: 160, y: 60 },
+            { x: 290, y: 10 },
+            { x: 360, y: 90 },
+          ],
+        },
+      ],
+      error: err?.message || "Unknown error",
     });
   }
 });
 
 /* ---------------- ListModels ---------------- */
-app.get("/list-models", async (_req, res) => {
+
+app.get("/api/list-models", async (_req, res) => {
+  if (!API_KEY) {
+    return res.status(500).json({ error: "GEMINI_API_KEY not configured" });
+  }
+
   try {
-    const url = `https://generativelanguage.googleapis.com/v1/models?key=${encodeURIComponent(API_KEY)}`;
+    const url = `https://generativelanguage.googleapis.com/v1/models?key=${encodeURIComponent(
+      API_KEY
+    )}`;
     const response = await fetch(url);
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(`ListModels error ${response.status}: ${JSON.stringify(data)}`);
+      throw new Error(
+        `ListModels error ${response.status}: ${JSON.stringify(data)}`
+      );
     }
     res.json(data);
   } catch (err) {
@@ -293,9 +355,10 @@ app.get("/list-models", async (_req, res) => {
 });
 
 /* ---------------- Start server ----------------- */
+
 const port = process.env.PORT || 8787;
 app.listen(port, () => {
   console.log(`🚀 Server running on http://localhost:${port}`);
   console.log(`🧠 Using model: ${MODEL}`);
-  console.log("✅ Ready for /palette and /art");
+  console.log("✅ Ready for / (frontend), /api/palette, and /api/art");
 });
