@@ -1,60 +1,51 @@
 /* server.js — Using Gemini 2.5 Flash
 - Serves the Pattern Illustrator frontend (index.html + JS/CSS)
 - Hosts Express routes (/api/palette, /api/art, /api/list-models) that call
-  the Gemini 2.5 Flash API to generate color palettes and vector stroke art,
-  validate JSON, and return responses.
-- I consulted ChatGPT5 for the following:
-    - Help with creating the server architecture and request–response flow
-    - Help with debugging errors with integrating the API calls
-- Primarily consulted the following:
-    - https://ai.google.dev/gemini-api/docs (Gemini API integration)
-    - https://expressjs.com/ (ExpressJS documentation)
-    - https://github.com/expressjs/cors (CORS)
-    - Various Google search results while debugging.
-    - My experience interning at Amazon this past summer building AI agents and designing system prompts
+  the Gemini 2.5 Flash API to generate color palettes and vector stroke art.
 */
 
 import express from "express";
 import cors from "cors";
 import bodyParser from "body-parser";
-import "dotenv/config"; // loads .env from project root (must include GEMINI_API_KEY)
+import "dotenv/config";
 import path from "path";
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// IMPORTANT: Vercel's working directory is your repo root
+const ROOT_DIR = process.cwd();
+
 const app = express();
 
-// Allow local Live Server / frontend origins (and same-origin in production)
-app.use(
-  cors({
-    origin: [/^http:\/\/localhost:\d+$/, /^http:\/\/127\.0\.0\.1:\d+$/],
-  })
-);
+/* ------------ Middleware ------------ */
 
+// allow requests from your own frontend (and localhost for dev)
+app.use(cors());
 app.use(bodyParser.json());
 
-// Serve static frontend files (index.html, JS, CSS, libraries, etc.)
-app.use(express.static(__dirname));
+// serve ALL static files from the repo root:
+//   /index.html, /style.css, /stroke.js, /libraries/p5.min.js, etc.
+app.use(express.static(ROOT_DIR));
 
-// Root route: show the drawing app
+/* ------------ Frontend route ------------ */
+
+// root -> your canvas app
 app.get("/", (_req, res) => {
-  res.sendFile(path.join(__dirname, "index.html"));
+  res.sendFile(path.join(ROOT_DIR, "index.html"));
 });
 
-// --- Verify API key ---
+/* ------------ Gemini config ------------ */
+
 const API_KEY = process.env.GEMINI_API_KEY;
 if (!API_KEY) {
-  console.error("❌ ERROR: GEMINI_API_KEY not found in environment");
-  // For safety on Vercel, don't exit; the routes will return 500 instead.
+  console.error("❌ WARNING: GEMINI_API_KEY not found in environment");
 }
 
-// --- Model + API version ---
 const API_VERSION = "v1";
 const MODEL = "gemini-2.5-flash";
 
-// --- Helper functions ---
 function extractTextFromCandidates(data) {
   const cand = data?.candidates?.[0];
   const parts = cand?.content?.parts || [];
@@ -72,7 +63,7 @@ function ensureValidPalette(json) {
   return json;
 }
 
-/* ---------------- Palette route ---------------- */
+/* ------------ /api/palette ------------ */
 
 app.post("/api/palette", async (req, res) => {
   console.log("\n=== /api/palette Request ===");
@@ -133,7 +124,7 @@ No other text or explanation.`;
   }
 });
 
-/* ---------------- ART route ---------------- */
+/* ------------ /api/art ------------ */
 
 app.post("/api/art", async (req, res) => {
   console.log("\n=== /api/art Request ===");
@@ -142,11 +133,10 @@ app.post("/api/art", async (req, res) => {
     return res.status(500).json({ error: "GEMINI_API_KEY not configured" });
   }
 
-  // Pull and lightly bound inputs
   const userPrompt = String(req.body?.prompt || "").slice(0, 600).trim();
   const existingRaw = Array.isArray(req.body?.existing) ? req.body.existing : [];
   const existing = existingRaw
-    .slice(0, 600) // cap number of strokes sent to model
+    .slice(0, 600)
     .map((s) => ({
       color: typeof s.color === "string" ? s.color : null,
       thickness: Number(s.thickness) || 4,
@@ -173,52 +163,14 @@ INPUT:
 - "existing": OPTIONAL array of current strokes, each:
   { "color":"#RRGGBB" | null, "thickness":number, "opacity":number,
     "eraser":false, "points":[{"x":number,"y":number}, ...] }
-  Coordinates are in a shared local space. Some fields may be null.
 
 TASK:
 Generate NEW, complementary strokes. Use "existing" to infer composition, scale, and style.
 If "existing" is empty or missing, rely solely on "prompt".
 
-PLACEMENT & COMPOSITION:
-- If the prompt implies attaching to a subject (e.g., "star on top of the tree", "eyes on the face", "roof on the house"):
-  1) Try to locate the subject in "existing" by its silhouette or likely geometry (e.g., a conical/triangular cluster for a tree).
-  2) If found, place the new strokes appropriately relative to that subject (e.g., star centered above the tree apex).
-  3) If NOT found, sketch a minimal, recognizable version of that subject first, then add the requested detail.
-- Preserve overall scale and placement; integrate into current composition, not overwrite it.
-
-NEW DRAWINGS:
-- Be as detailed as possible by using a mixture of short and long strokes to create a recognizable drawing. 
-- However, stay within the stroke constraints: Total new strokes: 20..60. Total points across all new strokes ≤ 15000.
-
-STYLE:
-- Match existing palette (prefer colors already present); you may add up to 2 harmonious new hues.
-- Keep thickness in the typical existing range (±25%).
-- Favor smooth, flowing polylines with natural curvature; recognizable but detailed forms.
-
 OUTPUT (JSON ONLY; no backticks, no comments):
-{
-  "strokes": [
-    {
-      "color": "#RRGGBB",
-      "thickness": 1-40,
-      "opacity": 60-100,
-      "eraser": false,
-      "points": [{"x": number, "y": number}] // 2..800 points
-    }
-  ]
-}
+{"strokes":[{"color":"#RRGGBB","thickness":1,"opacity":60,"eraser":false,"points":[{"x":0,"y":0}]}]}`;
 
-CONSTRAINTS:
-- Total new strokes: 20..60. Total points across all new strokes ≤ 15000.
-- Colors: 6-digit hex only.
-- Geometry hygiene: no NaN/Infinity, no duplicate consecutive points, avoid zero-length segments.
-- Avoid drawing on top of existing strokes unless the user asks to modify or fill a drawing.
-
-VALIDATION:
-- Return a single JSON object matching the schema above. No extra keys. No markdown.
-- Do not include comments, explanations, markdown, or any text outside of the JSON object because they will cause critical errors.`;
-
-    // Put user inputs as compact JSON after the instructions
     const userJson = JSON.stringify({ prompt: userPrompt, existing });
     const fullPrompt = `${sys}\n\n${userJson}`;
 
@@ -249,19 +201,15 @@ VALIDATION:
     if (!match) throw new Error("No JSON object found in model response");
 
     let art = JSON.parse(match[0]);
-
-    // --- Minimal validation/sanitization ---
     const isHex = (c) => typeof c === "string" && /^#[0-9A-F]{6}$/i.test(c);
     if (!Array.isArray(art?.strokes)) art = { strokes: [] };
 
-    // clamp totals
     let totalPoints = 0;
     const MAX_TOTAL_POINTS = 15000;
 
     art.strokes = art.strokes
       .map((s) => {
         const pts = Array.isArray(s.points) ? s.points : [];
-        // limit points per stroke and total
         let kept = [];
         for (const p of pts) {
           if (totalPoints >= MAX_TOTAL_POINTS) break;
@@ -280,13 +228,12 @@ VALIDATION:
           color: isHex(s.color) ? s.color.toUpperCase() : "#000000",
           thickness: Math.max(1, Math.min(40, Number(s.thickness) || 4)),
           opacity: Math.max(60, Math.min(100, Number(s.opacity) || 100)),
-          eraser: false, // force false
+          eraser: false,
           points: kept.slice(0, 800),
         };
       })
       .filter((s) => s.points.length >= 2);
 
-    // Fallback if nothing valid
     if (!art.strokes.length) {
       art = {
         strokes: [
@@ -296,10 +243,10 @@ VALIDATION:
             opacity: 100,
             eraser: false,
             points: [
-              { x: 480, y: 200 },
-              { x: 520, y: 260 },
-              { x: 560, y: 210 },
-              { x: 600, y: 270 },
+              { x: 0, y: 0 },
+              { x: 160, y: 60 },
+              { x: 290, y: 10 },
+              { x: 360, y: 90 },
             ],
           },
         ],
@@ -329,7 +276,7 @@ VALIDATION:
   }
 });
 
-/* ---------------- ListModels ---------------- */
+/* ------------ /api/list-models ------------ */
 
 app.get("/api/list-models", async (_req, res) => {
   if (!API_KEY) {
@@ -354,7 +301,7 @@ app.get("/api/list-models", async (_req, res) => {
   }
 });
 
-/* ---------------- Start server ----------------- */
+/* ------------ Start server ------------ */
 
 const port = process.env.PORT || 8787;
 app.listen(port, () => {
