@@ -4,7 +4,7 @@
     - Assistance in constructing the panel UI logic, organizing frame data structures,
          and debugging thumbnail generation and event handling.
    - Primarily consulted the following websites:
-    - https://p5js.org/reference/ (for p5.js)
+    - https://p5js.org/reference/ (for p5.js) 
 */
 
 (function (root) {
