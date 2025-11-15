@@ -8,22 +8,10 @@
    - Uses ai.js for AI swatches
    - Uses ai_art.js for AI art generation
    - Uses Symmetry from symmetry.js
-   - Consulted ChatGPT5 for 
-      - Help with the math-heavy portions (e.g. Hit Tests & Sliders and Rendering)
-      - Help with integrating the AI portions into the base application
-      - Help with debugging errors that came up while integrating button functionalities
-      - Help with JavaScript/HTML syntax for interaction and clipping 
-   - Primarily consulted the following:
-      - https://p5js.org/reference/ (For p5.js)
-      - Past projects and portfolios I've made for help with the UI and p5.js syntax
-      - Various websites on Google for small issues
    - This file is the main p5.js sketch that builds the drawing UI 
         (tools, sliders, color wheel, symmetry, vertex/move/erase modes), 
         manages strokes and hit-testing, and builds storing/animating frames 
         and AI integrations for palettes and art.
-   - Additionally, while Copilot was consulted for UI, throughout this project and helper files, UI design is also my own creation. 
-     - While I attempted to prototype different UIs with Copilot, most were really unappealling.
-     - Copilot did help a little with autocompletes to make the UI design faster.
 */
 
 let strokes = [];

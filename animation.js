@@ -1,11 +1,5 @@
 /* animation.js
    - Create animations via interpolation
-   - Consulted ChatGPT5 for 
-    - Help with the mathematical formulas for easing, resampling, and interpolation for animation
-    - Help with debugging errors for the construction of the animation from frame to frame
-   - Primarily consulted the following websites:
-    - https://erraticgenerator.com/blog/linear-interpolation-and-easing (Linear Interpolation and Easing)
-    - https://fiveable.me/2d-animation/unit-20 (Concept of tweening)
   - We store multiple drawings (keyframes). Each drawing is an array of strokes.
   - For a given global time t in [0,1], we figure out which two drawings we’re between,
       ease the local t, and create an in-between drawing by interpolating strokes.

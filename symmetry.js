@@ -1,11 +1,5 @@
 /* symmetry.js
    - Defines 180 degree rotational, 4-way rotational, mirrored, radial, dihedral, spiral, kaleidoscopic, and fractal symmetry
-   - I defined the symmetries, did the UI (albeit with Copilot completions), and did the 180 degree rotation and 4-way rotation math myself
-   - I consulted ChatGPT 5 for assistance with the mathematics for the other symmetries
-      and with debugging JavaScript syntax errors.
-   - Primarily consulted the following:
-      - https://helpingwithmath.com/180-degree-rotation/ 
-      - https://en.wikipedia.org/wiki/Rotational_symmetry 
 */
 
 (function () {
@@ -191,6 +185,7 @@
       .style('border', '1px solid #111');
 
     // Capitalized names
+    ui.select.option('Free Draw', 'none');
     ui.select.option('180° Rotational', 'rot180');
     ui.select.option('4-Way Rotational', 'rot4');
     ui.select.option('Mirror (Vertical)', 'mirrorV');
@@ -323,7 +318,7 @@
   }
 
   const Symmetry = {
-    mode: 'rot180',
+    mode: 'none',
     N: 10,
     useMirrors: true,
     scaleStep: 0.92,

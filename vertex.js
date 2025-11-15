@@ -1,7 +1,5 @@
 /* vertex.js
    - This file adds tools for editing and reshaping drawn lines by letting users select, move, and resample individual vertices on a stroke.
-   - Consulted ChatGPT5 for help with defining and refining the point-projection mathematics and debugging logic issues in JavaScript.
-   - Consulted https://p5js.org/reference/ for p5.js.
 */
 
 (function (root) {

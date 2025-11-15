@@ -1,10 +1,5 @@
 /* erase.js
    - Implements a vector eraser that repeatedly clips each polyline stroke against a moving circular brush
-   - Consulted ChatGPT 5 for
-    - Help with deriving and debugging the circle–segment intersection math 
-    - Help with designing and debugging a stable algorithm to reconstruct remaining stroke fragments without gaps or artifacts.
-   - Primarily consulted the following websites:
-    - https://p5js.org/reference/ (for p5.js)
 */
 
 (function (root) {
