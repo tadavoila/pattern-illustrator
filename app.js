@@ -49,7 +49,10 @@ let H = 16, S = 46, B = 100, A = 100;
 // Controls
 let thickSlider, opacSlider, eraserSlider, saveBtn, clearBtn;
 let drawBtn, eraseBtn, eraseStrokeBtn, changeColorBtn, vertexBtn, moveBtn;
-let storeBtn, animateBtn, easeSelect, durationSlider, durationLabel;
+let storeBtn, animateBtn, exportBtn, easeSelect, durationSlider, durationLabel;
+let isExporting = false;
+let _exportState = { rec: null, id: null, off: null, chunks: [] };
+let symDropdown = null;
 
 // Offscreen color wheel
 let gWheel;
@@ -76,9 +79,10 @@ let PALETTE = { x: BOX.x, y: BOX.y - 50, sw: 36, gap: 10, rows: 1 };
 
 // Global UI scale
 let uiScale = 1;
+let cnv;
 
 function setup() {
-  createCanvas(windowWidth, windowHeight);
+  cnv = createCanvas(windowWidth, windowHeight);
   colorMode(HSB, 360, 100, 100, 100);
   pixelDensity(1);
   textFont('cursive');
@@ -111,7 +115,7 @@ function setup() {
   eraserSlider.position(40, 455).style('width','260px');
 
   // Buttons
-  saveBtn = createButton('Save');
+  saveBtn = createButton('Save PNG');
   saveBtn.position(280, 530);
   saveBtn.mousePressed(saveCropped);
   styleButton(saveBtn, '#2563EB');
@@ -212,6 +216,12 @@ function setup() {
   animateBtn.position(110, 575);
   styleButton(animateBtn, '#0D9488');
 
+  // Export Animation button
+  exportBtn = createButton('Export Animation');
+  // Place above the drawing box (not overlapping it)
+  exportBtn.position(BOX.x + 10, Math.max(10, BOX.y - 50));
+  styleDropdownLike(exportBtn);
+
   // Ease + Duration
   createSpan('<b>Ease:</b>')
     .position(200, 580)
@@ -238,7 +248,10 @@ function setup() {
   const symX = BOX.x + BOX.w - 300;
   const symY = BOX.y - 46;
   // default mode lives in symmetry.js (Symmetry.mode)
-  window.Symmetry?.createDropdown(symX, symY);
+  symDropdown = window.Symmetry?.createDropdown(symX, symY);
+  // Align export to the exact Y of the symmetry dropdown, nudged slightly down
+  exportBtn && exportBtn.position(BOX.x + 10, symY + 2);
+  syncExportSizeToSymmetry();
 
   // AI panels
   if (window.AIArt?.init) window.AIArt.init({ x: 40, y: 640 });
@@ -291,6 +304,21 @@ function setup() {
     Anim.start(ms);
   });
 
+  // Export button: run animation and auto-save frames
+  exportBtn.mousePressed(() => {
+    if (isExporting) return;
+    if (Store.count() < 2) { alert('Need at least 2 stored drawings to export.'); return; }
+    // Prepare clean canvas state and start animation
+    strokes = []; currentStroke = null; liveSymmetryStrokes = [];
+    selectedStrokeIdx = -1; selectedVertexIdx = -1;
+    const seconds = Number(durationSlider?.value() || 10);
+    const ms = seconds * 1000;
+    isExporting = true;
+    Anim.start(ms);
+    // Export a cropped WebM of just the BOX region while UI stays visible
+    exportAnimationVideoCropped(seconds, 30);
+  });
+
   setMode('draw');
 }
 
@@ -307,6 +335,7 @@ function withClipToBox(fn) {
 
 function draw() {
   background('#ffffff');
+  // Always render UI and box; export is cropped so UI can remain visible
   drawUIPanel();
   drawBox(); // draws background + border + labels
 
@@ -650,6 +679,10 @@ function windowResized() {
   window.AIPalette?.reposition?.(40, 730);
   // Reposition storage panel under BOX
   Store.reposition({ box: BOX });
+  // Keep Export button above the drawing box and align to symmetry row
+  const symYPos = BOX.y - 46;
+  exportBtn && exportBtn.position(BOX.x + 10, symYPos + 2);
+  syncExportSizeToSymmetry();
 }
 
 // Compute scale based on viewport, clamped to a sensible range
@@ -675,6 +708,13 @@ function applyUIScale() {
     const b = allBtns[i]; if (b) styleButton(b, colors[i] || '#374151');
   }
 
+  // Keep Export button pinned visually above the box at same Y as symmetry dropdown
+  const symYPos2 = BOX.y - 46;
+  exportBtn && exportBtn.position(BOX.x + 10, symYPos2 + 2);
+  // Keep its dropdown-like style and size in sync with scale
+  exportBtn && styleDropdownLike(exportBtn);
+  syncExportSizeToSymmetry();
+
   // Scale sliders' visual width
   const sliderWidth = Math.round(260 * uiScale) + 'px';
   thickSlider && thickSlider.style('width', sliderWidth);
@@ -684,6 +724,109 @@ function applyUIScale() {
 
   // Scale palette swatch size
   PALETTE.sw = Math.round(36 * uiScale);
+}
+
+// Export a WebM video of just the BOX region (cropped) using an offscreen canvas
+function exportAnimationVideoCropped(seconds = 10, fps = 30) {
+  const mainCanvas = cnv?.elt || document.querySelector('canvas');
+  if (!mainCanvas) { console.error('Canvas not found'); isExporting = false; return; }
+  if (typeof window.MediaRecorder === 'undefined') {
+    alert('Video export requires MediaRecorder support in your browser.');
+    isExporting = false;
+    return;
+  }
+  // Clean up any previous export run
+  try {
+    if (_exportState.id) { clearInterval(_exportState.id); _exportState.id = null; }
+    if (_exportState.rec && _exportState.rec.state !== 'inactive') { _exportState.rec.stop(); }
+  } catch (_) {}
+  if (_exportState.off?.parentNode) { _exportState.off.parentNode.removeChild(_exportState.off); }
+  _exportState = { rec: null, id: null, off: null, chunks: [] };
+  // Offscreen canvas sized to the drawing box
+  const off = document.createElement('canvas');
+  off.width = Math.max(1, BOX.w);
+  off.height = Math.max(1, BOX.h);
+  const octx = off.getContext('2d');
+  octx.imageSmoothingEnabled = true;
+  // Attach offscreen to DOM (hidden) for broader compatibility
+  off.style.position = 'fixed';
+  off.style.left = '-99999px';
+  off.style.top = '0';
+  document.body.appendChild(off);
+
+  // Choose a supported mime type
+  const candidates = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+  let mime = '';
+  for (const c of candidates) { if (MediaRecorder.isTypeSupported?.(c)) { mime = c; break; } }
+  const stream = off.captureStream(fps);
+  let recorder;
+  try {
+    recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+  } catch (e) {
+    console.error('Failed to start MediaRecorder:', e);
+    alert('Could not start video recorder.');
+    isExporting = false;
+    return;
+  }
+
+  const chunks = [];
+  recorder.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+  recorder.onstop = () => {
+    try {
+      const size = chunks.reduce((n, b) => n + (b?.size || 0), 0);
+      if (size > 0) {
+        const blob = new Blob(chunks, { type: mime || 'video/webm' });
+        downloadBlob(blob, 'pattern_animation_cropped.webm');
+      } else {
+        console.warn('Recorder produced empty output; no chunks.');
+        alert('Export recording had no data. Try again or a different browser.');
+      }
+    } finally {
+      isExporting = false;
+      try { if (_exportState.id) clearInterval(_exportState.id); } catch (_) {}
+      if (off.parentNode) off.parentNode.removeChild(off);
+      _exportState = { rec: null, id: null, off: null, chunks: [] };
+    }
+  };
+
+  // Copy-only-the-box loop
+  const totalFrames = Math.max(1, Math.round(seconds * fps));
+  let frames = 0;
+  const intervalMs = 1000 / fps;
+  recorder.start();
+  const id = setInterval(() => {
+    try {
+      octx.clearRect(0, 0, off.width, off.height);
+      // Copy box region from main canvas into offscreen canvas
+      octx.drawImage(mainCanvas, BOX.x, BOX.y, BOX.w, BOX.h, 0, 0, off.width, off.height);
+    } catch (e) {
+      console.error('Frame copy failed:', e);
+    }
+    frames++;
+    if (frames >= totalFrames) {
+      clearInterval(id);
+      try {
+        if (recorder.state === 'recording' && recorder.requestData) {
+          recorder.requestData();
+        }
+        recorder.stop();
+      } catch (_) { isExporting = false; }
+    }
+  }, intervalMs);
+  _exportState = { rec: recorder, id, off, chunks };
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 0);
 }
 
 // Build/rebuild offscreen color wheel graphic per current WHEEL.r
@@ -728,6 +871,38 @@ function styleButton(btn, bg) {
   btn.style('display', 'inline-flex');
   btn.style('align-items', 'center');
   btn.style('justify-content', 'center');
+}
+// Dropdown-like style (match selects like ease/symmetry)
+function styleDropdownLike(btn) {
+  btn.style('background', '#ffffff');
+  btn.style('color', '#111');
+  btn.style('border', '1px solid #111');
+  btn.style('border-radius', '8px');
+  btn.style('font-family', 'cursive');
+  // Match dropdown typography exactly
+  btn.style('font-size', '12px');
+  btn.style('font-weight', 'normal');
+  btn.style('cursor', 'pointer');
+  // Match dropdown padding
+  btn.style('padding', '6px');
+  btn.style('box-sizing', 'border-box');
+  btn.style('display', 'inline-block');
+}
+
+function syncExportSizeToSymmetry() {
+  try {
+    if (!symDropdown || !exportBtn) return;
+    const el = symDropdown.elt || null;
+    if (!el) return;
+    const w = Math.max(0, el.offsetWidth || 0);
+    const h = Math.max(0, el.offsetHeight || 0);
+    if (w && h) {
+      exportBtn.style('width', w + 'px');
+      exportBtn.style('height', h + 'px');
+    }
+  } catch (e) {
+    // noop
+  }
 }
 function setMode(mode) {
   toolMode = mode;
