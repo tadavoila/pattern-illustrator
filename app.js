@@ -262,7 +262,7 @@ function setup() {
   // Wire storage panel 
   Store.init({
     box: BOX,
-    mountBelowPx: 35,
+    mountBelowPx: 45,
     onLoadRequested: (idx) => {
       const loaded = Store.loadStored(idx);
       strokes = loaded;
@@ -621,7 +621,7 @@ function saveCropped() { const img = get(BOX.x, BOX.y, BOX.w, BOX.h); img.save('
 function updateBoxForWindow() {
   // Keep existing left gutter for the tool panel
   const RIGHT_MARGIN = 30;
-  const MOUNT_BELOW = 35; // matches Store.init mountBelowPx
+  const MOUNT_BELOW = 45; // matches Store.init mountBelowPx
   const FOOTER_SAFETY = 24; // for footer text inside the box area
   const panelH = (window.Store && typeof Store.panelHeight === 'function') ? Store.panelHeight() : 140;
   const BOTTOM_RESERVED = MOUNT_BELOW + panelH + FOOTER_SAFETY;
@@ -645,11 +645,9 @@ function windowResized() {
   const symX = BOX.x + BOX.w - 300;
   const symY = BOX.y - 46;
   window.Symmetry?.reposition(symX, symY, BOX);
-  // Reposition AI panels relative to scaled UI
-  const aiArtY = Math.round(640 * uiScale);
-  const aiPalY = Math.round(730 * uiScale);
-  window.AIArt?.reposition?.(40, aiArtY);
-  window.AIPalette?.reposition?.(40, aiPalY);
+  // Keep AI panels at fixed positions; do not scale with viewport
+  window.AIArt?.reposition?.(40, 640);
+  window.AIPalette?.reposition?.(40, 730);
   // Reposition storage panel under BOX
   Store.reposition({ box: BOX });
 }
