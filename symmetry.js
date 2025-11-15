@@ -184,8 +184,8 @@
     ui.select = createSelect();
     ui.select.position(x+120, y);
     ui.select.style('font-family', 'cursive')
-      .style('font-size', '12px')
-      .style('padding', '6px')
+      .style('font-size', '11px')
+      .style('padding', '5px')
       .style('border-radius', '8px')
       .style('background', '#fff')
       .style('border', '1px solid #111');

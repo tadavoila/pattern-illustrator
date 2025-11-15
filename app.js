@@ -249,9 +249,10 @@ function setup() {
   const symY = BOX.y - 46;
   // default mode lives in symmetry.js (Symmetry.mode)
   symDropdown = window.Symmetry?.createDropdown(symX, symY);
-  // Align export to the exact Y of the symmetry dropdown, nudged slightly down
-  exportBtn && exportBtn.position(BOX.x + 10, symY + 2);
+  // Size + position Export next to symmetry dropdown
   syncExportSizeToSymmetry();
+  rightAlignSymmetryDropdown();
+  positionExportNextToSymmetry('left');
 
   // AI panels
   if (window.AIArt?.init) window.AIArt.init({ x: 40, y: 640 });
@@ -680,9 +681,10 @@ function windowResized() {
   // Reposition storage panel under BOX
   Store.reposition({ box: BOX });
   // Keep Export button above the drawing box and align to symmetry row
-  const symYPos = BOX.y - 46;
-  exportBtn && exportBtn.position(BOX.x + 10, symYPos + 2);
+  // Keep Export next to the symmetry dropdown
   syncExportSizeToSymmetry();
+  rightAlignSymmetryDropdown();
+  positionExportNextToSymmetry('left');
 }
 
 // Compute scale based on viewport, clamped to a sensible range
@@ -709,11 +711,11 @@ function applyUIScale() {
   }
 
   // Keep Export button pinned visually above the box at same Y as symmetry dropdown
-  const symYPos2 = BOX.y - 46;
-  exportBtn && exportBtn.position(BOX.x + 10, symYPos2 + 2);
   // Keep its dropdown-like style and size in sync with scale
   exportBtn && styleDropdownLike(exportBtn);
   syncExportSizeToSymmetry();
+  rightAlignSymmetryDropdown();
+  positionExportNextToSymmetry('left');
 
   // Scale sliders' visual width
   const sliderWidth = Math.round(260 * uiScale) + 'px';
@@ -880,11 +882,11 @@ function styleDropdownLike(btn) {
   btn.style('border-radius', '8px');
   btn.style('font-family', 'cursive');
   // Match dropdown typography exactly
-  btn.style('font-size', '12px');
+  btn.style('font-size', '11px');
   btn.style('font-weight', 'normal');
   btn.style('cursor', 'pointer');
   // Match dropdown padding
-  btn.style('padding', '6px');
+  btn.style('padding', '5px');
   btn.style('box-sizing', 'border-box');
   btn.style('display', 'inline-block');
 }
@@ -900,6 +902,39 @@ function syncExportSizeToSymmetry() {
       exportBtn.style('width', w + 'px');
       exportBtn.style('height', h + 'px');
     }
+  } catch (e) {
+    // noop
+  }
+}
+
+function positionExportNextToSymmetry(side = 'left') {
+  try {
+    if (!symDropdown || !exportBtn) return;
+    const el = symDropdown.elt || null;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const gap = 16;
+    const symW = el.offsetWidth || 0;
+    const btnW = exportBtn.elt ? (exportBtn.elt.offsetWidth || 0) : 0;
+    const x = side === 'left'
+      ? (window.scrollX + rect.left - (btnW || symW) - gap)
+      : (window.scrollX + rect.left + symW + gap);
+    const y = window.scrollY + rect.top;
+    exportBtn.position(Math.max(0, Math.round(x)), Math.max(0, Math.round(y)));
+  } catch (e) {
+    // noop
+  }
+}
+
+function rightAlignSymmetryDropdown() {
+  try {
+    if (!symDropdown) return;
+    const el = symDropdown.elt || null;
+    if (!el) return;
+    const w = el.offsetWidth || 0;
+    const x = BOX.x + BOX.w - w;
+    const y = BOX.y - 46; // same baseline as before
+    symDropdown.position(x, y);
   } catch (e) {
     // noop
   }
