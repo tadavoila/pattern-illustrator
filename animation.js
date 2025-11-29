@@ -116,12 +116,12 @@ window.Anim = (function () {
   }
 
 /* Converts user freehand stroke into a curve with evenly spaced points, 
-making animation, interpolation, and morphing stable. */
+making animation, interpolation, and morphing stable */
 function resamplePointsLocal(points, N) {
   if (!Array.isArray(points) || points.length < 2) return points ? points.slice() : [];
   N = Math.max(2, Math.floor(N));
 
-  // Compute cumulative distances along the polyline.
+  // Compute cumulative distances along the polyline
   const L = [0];
   for (let i = 1; i < points.length; i++) {
     L.push(L[i - 1] + dist(points[i - 1].x, points[i - 1].y, points[i].x, points[i].y));
@@ -132,20 +132,20 @@ function resamplePointsLocal(points, N) {
 
   const out = [];
 
-  // Place each output sample at its proportional distance t along the path.
+  // Place each output sample at its proportional distance t along the path
   for (let k = 0; k < N; k++) {
     const t = (k / (N - 1)) * total;
 
-    // Find which segment contains t.
+    // Find which segment contains t
     let j = 1;
     while (j < L.length && L[j] < t) j++;
     const i = Math.max(1, j);
 
-    // Compute local parameter u within that segment.
+    // Compute local parameter u within that segment
     const t0 = L[i - 1], t1 = L[i];
     const u = (t - t0) / (t1 - t0 || 1e-9);
 
-    // Interpolate point location.
+    // Interpolate point location
     const p0 = points[i - 1], p1 = points[i];
     out.push({ x: lerp(p0.x, p1.x, u), y: lerp(p0.y, p1.y, u) });
   }
