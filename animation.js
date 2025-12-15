@@ -115,8 +115,8 @@ window.Anim = (function () {
     return { colHSB: { ...s.colHSB }, thickness: 0.001, opacity: 0, eraser: false, points: pts };
   }
 
-/* Converts user freehand stroke into a curve with evenly spaced points, 
-making animation, interpolation, and morphing stable */
+// Resample a polyline (array of points) to have N evenly spaced points
+// This helps make animation and morphing between strokes smooth and stable
 function resamplePointsLocal(points, N) {
   if (!Array.isArray(points) || points.length < 2) return points ? points.slice() : [];
   N = Math.max(2, Math.floor(N));
@@ -128,7 +128,7 @@ function resamplePointsLocal(points, N) {
   }
 
   const total = L[L.length - 1];
-  if (total === 0) return Array(N).fill({ ...points[0] });
+  if (total === 0) return Array(N).fill({ ...points[0] }); // All points are the same
 
   const out = [];
 
@@ -145,7 +145,7 @@ function resamplePointsLocal(points, N) {
     const t0 = L[i - 1], t1 = L[i];
     const u = (t - t0) / (t1 - t0 || 1e-9);
 
-    // Interpolate point location
+    // Interpolate point location between p0 and p1
     const p0 = points[i - 1], p1 = points[i];
     out.push({ x: lerp(p0.x, p1.x, u), y: lerp(p0.y, p1.y, u) });
   }
@@ -153,45 +153,57 @@ function resamplePointsLocal(points, N) {
   return out;
 }
 
-  function tweenTwoStrokes(a, b, t, N = 60) {
-    const pa = resamplePointsLocal(a.points, N);
-    const pb = resamplePointsLocal(b.points, N);
+// Interpolate between two strokes (a and b) at time t in [0,1]
+// Returns a new stroke with interpolated points, color, thickness, and opacity
+function tweenTwoStrokes(a, b, t, N = 60) {
+  // Resample both strokes to have the same number of points
+  const pa = resamplePointsLocal(a.points, N);
+  const pb = resamplePointsLocal(b.points, N);
 
-    const pts = [];
-    for (let j = 0; j < N; j++)
-      pts.push({ x: lerp(pa[j].x, pb[j].x, t), y: lerp(pa[j].y, pb[j].y, t) });
+  // Interpolate each point
+  const pts = [];
+  for (let j = 0; j < N; j++)
+    pts.push({ x: lerp(pa[j].x, pb[j].x, t), y: lerp(pa[j].y, pb[j].y, t) });
 
-    const colHSB = {
-      h: lerp(a.colHSB.h, b.colHSB.h, t),
-      s: lerp(a.colHSB.s, b.colHSB.s, t),
-      b: lerp(a.colHSB.b, b.colHSB.b, t),
-      a: lerp(a.opacity ?? a.colHSB.a ?? 100, b.opacity ?? b.colHSB.a ?? 100, t)
-    };
+  // Interpolate color (HSB), thickness, and opacity
+  const colHSB = {
+    h: lerp(a.colHSB.h, b.colHSB.h, t),
+    s: lerp(a.colHSB.s, b.colHSB.s, t),
+    b: lerp(a.colHSB.b, b.colHSB.b, t),
+    a: lerp(a.opacity ?? a.colHSB.a ?? 100, b.opacity ?? b.colHSB.a ?? 100, t)
+  };
 
-    const thickness = lerp(a.thickness || 4, b.thickness || 4, t);
-    const opacity = lerp(a.opacity ?? 100, b.opacity ?? 100, t);
+  const thickness = lerp(a.thickness || 4, b.thickness || 4, t);
+  const opacity = lerp(a.opacity ?? 100, b.opacity ?? 100, t);
 
-    return { colHSB, thickness, opacity, eraser: false, points: pts };
-  }
+  return { colHSB, thickness, opacity, eraser: false, points: pts };
+}
 
-  function tweenDrawingsMulti(A, B, t) {
-    const AA = A.filter(s => !s.eraser);
-    const BB = B.filter(s => !s.eraser);
-    const { pairs, unmatchedA, unmatchedB } = matchStrokes(AA, BB);
-    const out = [];
+// Interpolate between two drawings (arrays of strokes) at time t in [0,1]
+// Matches strokes between drawings, morphs matched pairs, and fades in/out unmatched strokes
+function tweenDrawingsMulti(A, B, t) {
+  // Ignore eraser strokes for morphing
+  const AA = A.filter(s => !s.eraser);
+  const BB = B.filter(s => !s.eraser);
+  const { pairs, unmatchedA, unmatchedB } = matchStrokes(AA, BB);
+  const out = [];
 
-    for (const [ia, ib] of pairs)
-      out.push(tweenTwoStrokes(AA[ia], BB[ib], t, 60));
+  // Morph matched strokes
+  for (const [ia, ib] of pairs)
+    out.push(tweenTwoStrokes(AA[ia], BB[ib], t, 60));
 
-    for (const ia of unmatchedA)
-      out.push(tweenTwoStrokes(AA[ia], ghostFromStrokeLike(AA[ia]), t, 40));
+  // Fade out unmatched strokes from A
+  for (const ia of unmatchedA)
+    out.push(tweenTwoStrokes(AA[ia], ghostFromStrokeLike(AA[ia]), t, 40));
 
-    for (const ib of unmatchedB)
-      out.push(tweenTwoStrokes(ghostFromStrokeLike(BB[ib]), BB[ib], t, 40));
+  // Fade in unmatched strokes from B
+  for (const ib of unmatchedB)
+    out.push(tweenTwoStrokes(ghostFromStrokeLike(BB[ib]), BB[ib], t, 40));
 
-    return out;
-  }
+  return out;
+}
 
-  Anim._tweenDrawingsMulti = tweenDrawingsMulti;
-  return Anim;
+// Expose tweenDrawingsMulti for use elsewhere
+Anim._tweenDrawingsMulti = tweenDrawingsMulti;
+return Anim;
 })();
